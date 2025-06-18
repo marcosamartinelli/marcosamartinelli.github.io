@@ -8,80 +8,108 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-light">
-  <div class="container py-4">
-    <div class="text-center mb-4">
-      <h2 class="text-primary">Painel Remoto do Reservatório</h2>
-    </div>
+<script>
+// Autenticação simples
+const senha = prompt("Digite a senha para acesso:");
+if (senha !== "esp32senha") {
+  document.write("<h3>Acesso negado</h3>");
+  throw new Error("Senha incorreta");
+}
+</script>
 
-    <div class="card mb-4">
-      <div class="card-body">
-        <p><strong>Nível da água:</strong> <span id="nivel">--</span>%</p>
-        <p><strong>Distância:</strong> <span id="distancia">--</span> cm</p>
-        <p><strong>Horário:</strong> <span id="hora">--:--:--</span></p>
-      </div>
-    </div>
+<div class="container py-4">
+  <div class="text-center mb-4">
+    <h2 class="text-primary">Painel Remoto do Reservatório</h2>
+  </div>
 
-    <div class="card">
-      <div class="card-body">
-        <canvas id="grafico"></canvas>
-      </div>
+  <div class="card mb-3">
+    <div class="card-body">
+      <p><strong>Nível da água:</strong> <span id="nivel">--</span>%</p>
+      <p><strong>Distância:</strong> <span id="distancia">--</span> cm</p>
+      <p><strong>Horário:</strong> <span id="hora">--:--:--</span></p>
     </div>
   </div>
 
-  <script>
-    const channelID = '2992975';
-    const readAPIKey = '54I7YWRQZ7EKSZKH';
-    let chart;
+  <div class="card mb-3">
+    <div class="card-body">
+      <canvas id="grafico"></canvas>
+    </div>
+    <div class="card-footer text-end">
+      <button id="baixarCsv" class="btn btn-outline-primary btn-sm">Exportar CSV</button>
+      <a href="detalhes.html" class="btn btn-outline-secondary btn-sm">Página de Detalhes</a>
+    </div>
+  </div>
+</div>
 
-    async function carregarDados() {
-      const url = `https://api.thingspeak.com/channels/${channelID}/feeds.json?results=20&api_key=${readAPIKey}`;
-      const resp = await fetch(url);
-      const json = await resp.json();
+<script>
+const channelID = '2992975';
+const readAPIKey = '54I7YWRQZ7EKSZKH';
 
-      const feeds = json.feeds;
-      const nivel = feeds[feeds.length - 1].field1;
-      const dist = feeds[feeds.length - 1].field2;
-      const hora = feeds[feeds.length - 1].field3 || feeds[feeds.length - 1].created_at.substr(11, 8);
+let chart;
+let dadosFeed = [];
 
-      document.getElementById('nivel').innerText = nivel;
-      document.getElementById('distancia').innerText = dist;
-      document.getElementById('hora').innerText = hora;
+async function carregarDados() {
+  const url = `https://api.thingspeak.com/channels/${channelID}/feeds.json?results=20&api_key=${readAPIKey}`;
+  const resp = await fetch(url);
+  const json = await resp.json();
+  const feeds = json.feeds.map(f => ({
+    time: f.field3 || f.created_at.substr(11,8),
+    nivel: parseFloat(f.field1),
+    dist: parseFloat(f.field2)
+  }));
+  dadosFeed = feeds;
 
-      const labels = feeds.map(f => f.field3 || f.created_at.substr(11, 8));
-      const dados = feeds.map(f => parseFloat(f.field1));
+  // Atualiza info
+  const ultimo = feeds[feeds.length-1];
+  document.getElementById('nivel').innerText = ultimo.nivel;
+  document.getElementById('distancia').innerText = ultimo.dist;
+  document.getElementById('hora').innerText = ultimo.time;
 
-      if (chart) {
-        chart.data.labels = labels;
-        chart.data.datasets[0].data = dados;
-        chart.update();
-      } else {
-        chart = new Chart(document.getElementById('grafico').getContext('2d'), {
-          type: 'line',
-          data: {
-            labels: labels,
-            datasets: [{
-              label: 'Nível da Água (%)',
-              data: dados,
-              borderColor: 'blue',
-              fill: false,
-              tension: 0.1
-            }]
-          },
-          options: {
-            responsive: true,
-            scales: {
-              y: {
-                suggestedMin: 0,
-                suggestedMax: 100
-              }
-            }
-          }
-        });
+  // Prepara dados para o gráfico
+  const labels = feeds.map(f => f.time);
+  const dataNivel = feeds.map(f => f.nivel);
+  const dataDist = feeds.map(f => f.dist);
+
+  if (chart) {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = dataNivel;
+    chart.data.datasets[1].data = dataDist;
+    chart.update();
+  } else {
+    chart = new Chart(document.getElementById('grafico'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {label: 'Nível (%)', data: dataNivel, borderColor: 'blue', fill: false, tension:0.1},
+          {label: 'Distância (cm)', data: dataDist, borderColor: 'green', fill: false, tension:0.1}
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: {suggestedMin: 0, suggestedMax: 260}
+        }
       }
-    }
+    });
+  }
+}
 
-    carregarDados();
-    setInterval(carregarDados, 15000); // atualiza a cada 15 segundos
-  </script>
+// CSV
+document.getElementById('baixarCsv').onclick = () => {
+  let csv = "time,nivel,distancia\n";
+  dadosFeed.forEach(f => {
+    csv += `${f.time},${f.nivel},${f.dist}\n`;
+  });
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `reservatorio_${Date.now()}.csv`;
+  link.click();
+};
+
+carregarDados();
+setInterval(carregarDados, 15000);
+</script>
 </body>
 </html>
