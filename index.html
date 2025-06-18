@@ -25,6 +25,7 @@ if (prompt("Digite a senha para acesso:") !== "montecristo") {
       <p><strong>Nível da água:</strong> <span id="nivel">--</span>%</p>
       <p><strong>Distância:</strong> <span id="distancia">--</span> cm</p>
       <p><strong>Horário:</strong> <span id="hora">--:--:--</span></p>
+      <p><strong>IP Local do ESP32:</strong> <span id="esp-ip">--</span></p>
     </div>
   </div>
 
@@ -63,7 +64,8 @@ async function carregarDados() {
   const feeds = json.feeds.map(f => ({
     time: f.field3 || f.created_at.substr(11,8),
     nivel: parseFloat(f.field1),
-    dist: parseFloat(f.field2)
+    dist: parseFloat(f.field2),
+    ip: f.field4
   }));
   dadosFeed = feeds;
 
@@ -71,6 +73,7 @@ async function carregarDados() {
   document.getElementById('nivel').innerText = ultimo.nivel;
   document.getElementById('distancia').innerText = ultimo.dist;
   document.getElementById('hora').innerText = ultimo.time;
+  document.getElementById('esp-ip').innerText = ultimo.ip || 'N/A';
 
   const labels = feeds.map(f => f.time);
   const dataNivel = feeds.map(f => f.nivel);
@@ -123,8 +126,8 @@ async function carregarDados() {
 
 // CSV
 document.getElementById('baixarCsv').onclick = () => {
-  let csv = "hora,nivel,distancia\n";
-  dadosFeed.forEach(f => csv += `${f.time},${f.nivel},${f.dist}\n`);
+  let csv = "hora,nivel,distancia,ip\n";
+  dadosFeed.forEach(f => csv += `${f.time},${f.nivel},${f.dist},${f.ip}\n`);
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
