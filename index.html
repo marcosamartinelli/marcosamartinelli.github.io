@@ -9,9 +9,7 @@
 </head>
 <body class="bg-light">
 <script>
-// Autenticação simples
-const senha = prompt("Digite a senha para acesso:");
-if (senha !== "montecristo") {
+if (prompt("Digite a senha para acesso:") !== "esp32senha") {
   document.write("<h3>Acesso negado</h3>");
   throw new Error("Senha incorreta");
 }
@@ -30,23 +28,33 @@ if (senha !== "montecristo") {
     </div>
   </div>
 
-  <div class="card mb-3">
-    <div class="card-body">
-      <canvas id="grafico"></canvas>
-    </div>
-    <div class="card-footer text-end">
-      <button id="baixarCsv" class="btn btn-outline-primary btn-sm">Exportar CSV</button>
-      <a href="detalhes.html" class="btn btn-outline-secondary btn-sm">Página de Detalhes</a>
-    </div>
+  <div class="card mb-3"><div class="card-body">
+    <h5>Nível da Água (%)</h5>
+    <canvas id="graficoNivel"></canvas>
+  </div></div>
+
+  <div class="card mb-3"><div class="card-body">
+    <h5>Distância (cm)</h5>
+    <canvas id="graficoDist"></canvas>
+  </div></div>
+
+  <div class="card mb-3"><div class="card-body">
+    <h5>Média Móvel do Nível da Água (últimos 5)</h5>
+    <canvas id="graficoMedia"></canvas>
+  </div></div>
+
+  <div class="text-end mb-3">
+    <button id="baixarCsv" class="btn btn-outline-primary btn-sm">Exportar CSV</button>
+    <a href="detalhes.html" class="btn btn-outline-secondary btn-sm">Página de Detalhes</a>
   </div>
 </div>
 
 <script>
 const channelID = '2992975';
 const readAPIKey = '54I7YWRQZ7EKSZKH';
-
-let chart;
 let dadosFeed = [];
+
+let chartNivel, chartDist, chartMedia;
 
 async function carregarDados() {
   const url = `https://api.thingspeak.com/channels/${channelID}/feeds.json?results=20&api_key=${readAPIKey}`;
@@ -59,53 +67,69 @@ async function carregarDados() {
   }));
   dadosFeed = feeds;
 
-  // Atualiza info
-  const ultimo = feeds[feeds.length-1];
+  const ultimo = feeds.at(-1);
   document.getElementById('nivel').innerText = ultimo.nivel;
   document.getElementById('distancia').innerText = ultimo.dist;
   document.getElementById('hora').innerText = ultimo.time;
 
-  // Prepara dados para o gráfico
   const labels = feeds.map(f => f.time);
   const dataNivel = feeds.map(f => f.nivel);
   const dataDist = feeds.map(f => f.dist);
+  const dataMedia = feeds.map((_, i, arr) => {
+    if (i < 4) return null;
+    const slice = arr.slice(i-4, i+1).map(f => f.nivel);
+    return (slice.reduce((a,b) => a+b, 0) / 5).toFixed(1);
+  });
 
-  if (chart) {
-    chart.data.labels = labels;
-    chart.data.datasets[0].data = dataNivel;
-    chart.data.datasets[1].data = dataDist;
-    chart.update();
-  } else {
-    chart = new Chart(document.getElementById('grafico'), {
+  if (!chartNivel) {
+    chartNivel = new Chart(document.getElementById('graficoNivel'), {
       type: 'line',
       data: {
         labels: labels,
-        datasets: [
-          {label: 'Nível (%)', data: dataNivel, borderColor: 'blue', fill: false, tension:0.1},
-          {label: 'Distância (cm)', data: dataDist, borderColor: 'green', fill: false, tension:0.1}
-        ]
+        datasets: [{ label: 'Nível (%)', data: dataNivel, borderColor: 'blue', tension: 0.1 }]
       },
-      options: {
-        responsive: true,
-        scales: {
-          y: {suggestedMin: 0, suggestedMax: 100}
-        }
-      }
+      options: { responsive: true, scales: { y: { min: 0, max: 100 } } }
     });
+    chartDist = new Chart(document.getElementById('graficoDist'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{ label: 'Distância (cm)', data: dataDist, borderColor: 'green', tension: 0.1 }]
+      },
+      options: { responsive: true, scales: { y: { min: 0, max: 260 } } }
+    });
+    chartMedia = new Chart(document.getElementById('graficoMedia'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{ label: 'Média Móvel (%)', data: dataMedia, borderColor: 'orange', tension: 0.3 }]
+      },
+      options: { responsive: true, scales: { y: { min: 0, max: 100 } } }
+    });
+  } else {
+    chartNivel.data.labels = labels;
+    chartNivel.data.datasets[0].data = dataNivel;
+    chartNivel.update();
+
+    chartDist.data.labels = labels;
+    chartDist.data.datasets[0].data = dataDist;
+    chartDist.update();
+
+    chartMedia.data.labels = labels;
+    chartMedia.data.datasets[0].data = dataMedia;
+    chartMedia.update();
   }
 }
 
 // CSV
 document.getElementById('baixarCsv').onclick = () => {
-  let csv = "time,nivel,distancia\n";
-  dadosFeed.forEach(f => {
-    csv += `${f.time},${f.nivel},${f.dist}\n`;
-  });
+  let csv = "hora,nivel,distancia\n";
+  dadosFeed.forEach(f => csv += `${f.time},${f.nivel},${f.dist}\n`);
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `reservatorio_${Date.now()}.csv`;
-  link.click();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `nivel_agua_${Date.now()}.csv`;
+  a.click();
 };
 
 carregarDados();
