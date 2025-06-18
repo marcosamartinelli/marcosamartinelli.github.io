@@ -9,9 +9,14 @@
 </head>
 <body class="bg-light">
 <script>
-if (prompt("Digite a senha para acesso:") !== "montecristo") {
-  document.write("<h3>Acesso negado</h3>");
-  throw new Error("Senha incorreta");
+const senhaCorreta = "montecristo";
+if (localStorage.getItem("senha_ok") !== senhaCorreta) {
+  const senha = prompt("Digite a senha para acesso:");
+  if (senha !== senhaCorreta) {
+    document.write("<h3>Acesso negado</h3>");
+    throw new Error("Senha incorreta");
+  }
+  localStorage.setItem("senha_ok", senhaCorreta);
 }
 </script>
 
