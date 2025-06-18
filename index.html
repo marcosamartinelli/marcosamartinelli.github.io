@@ -31,6 +31,7 @@
   <script>
     const channelID = '2992975';
     const readAPIKey = '54I7YWRQZ7EKSZKH';
+    let chart;
 
     async function carregarDados() {
       const url = `https://api.thingspeak.com/channels/${channelID}/feeds.json?results=20&api_key=${readAPIKey}`;
@@ -49,31 +50,38 @@
       const labels = feeds.map(f => f.field3 || f.created_at.substr(11, 8));
       const dados = feeds.map(f => parseFloat(f.field1));
 
-      new Chart(document.getElementById('grafico').getContext('2d'), {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Nível da Água (%)',
-            data: dados,
-            borderColor: 'blue',
-            fill: false,
-            tension: 0.1
-          }]
-        },
-        options: {
-          responsive: true,
-          scales: {
-            y: {
-              suggestedMin: 0,
-              suggestedMax: 100
+      if (chart) {
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = dados;
+        chart.update();
+      } else {
+        chart = new Chart(document.getElementById('grafico').getContext('2d'), {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Nível da Água (%)',
+              data: dados,
+              borderColor: 'blue',
+              fill: false,
+              tension: 0.1
+            }]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              y: {
+                suggestedMin: 0,
+                suggestedMax: 100
+              }
             }
           }
-        }
-      });
+        });
+      }
     }
 
     carregarDados();
+    setInterval(carregarDados, 15000); // atualiza a cada 15 segundos
   </script>
 </body>
 </html>
