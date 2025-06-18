@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Detalhes do Reservatório</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container py-4">
+  <h2>Painel de Detalhamento</h2>
+  <p>Carregando histórico completo e médias diárias...</p>
+</div>
+<script>
+const cid = '2992975', key = '54I7YWRQZ7EKSZKH';
+fetch(`https://api.thingspeak.com/channels/${cid}/feeds.json?api_key=${key}&results=100`)
+.then(r=>r.json()).then(json => {
+  const feeds = json.feeds;
+  let html = `<div class="container"><h2>Últimos ${feeds.length} registros</h2><table class="table table-sm"><thead><tr><th>Horário</th><th>Nível (%)</th><th>Distância (cm)</th></tr></thead><tbody>`;
+  feeds.forEach(f => {
+    const t = f.field3 || f.created_at.substr(11,8);
+    html += `<tr><td>${t}</td><td>${f.field1}</td><td>${f.field2}</td></tr>`;
+  });
+  // Média diária (simples)
+  const medias = {};
+  feeds.forEach(f => {
+    const date = f.created_at.substr(0,10);
+    if (!medias[date]) medias[date] = {sum:0,count:0};
+    medias[date].sum += parseFloat(f.field1);
+    medias[date].count++;
+  });
+  html += `</tbody></table><h3>Médias Diárias</h3><ul>`;
+  for (const d in medias) {
+    html += `<li>${d}: ${(medias[d].sum/medias[d].count).toFixed(1)}%</li>`;
+  }
+  html += `</ul><a href="index.html" class="btn btn-sm btn-primary">Voltar</a></div>`;
+  document.body.innerHTML = html;
+});
+</script>
+</body>
+</html>
