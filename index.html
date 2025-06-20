@@ -60,7 +60,7 @@
 
     <div class="card mb-3">
       <div class="card-body">
-        <h5>Média Móvel do Nível da Água (ultimos 5)</h5>
+        <h5>Média Móvel do Nível da Água (últimos 5)</h5>
         <canvas id="graficoMedia"></canvas>
       </div>
     </div>
@@ -68,12 +68,15 @@
     <div class="text-end mb-3">
       <button id="baixarCsv" class="btn btn-outline-primary btn-sm">Exportar CSV</button>
       <a href="detalhes.html" class="btn btn-outline-secondary btn-sm">Página de Detalhes</a>
+      <button id="logout" class="btn btn-outline-danger btn-sm">Sair</button>
     </div>
   </div>
 
   <script>
-    const correctPasswordHash = "8ac558607b5aca14188fc9c4a75b177dcb02ff8cda2e3adcd98b603ec0c6a8f7"; // "minha_senha"
+    // Hash SHA-256 da senha (hash de "minha_senha")
+    const correctPasswordHash = "8ac558607b5aca14188fc9c4a75b177dcb02ff8cda2e3adcd98b603ec0c6a8f7";
 
+    // Funções para gerenciar cookies
     function setCookie(nome, valor, dias) {
       const d = new Date();
       d.setTime(d.getTime() + (dias * 24 * 60 * 60 * 1000));
@@ -84,12 +87,17 @@
       const nameEQ = nome + "=";
       const ca = document.cookie.split(';');
       for (let c of ca) {
-        while (c.charAt(0) == ' ') c = c.substring(1);
-        if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length);
+        while (c.charAt(0) === ' ') c = c.substring(1);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length);
       }
       return null;
     }
 
+    function deleteCookie(nome) {
+      document.cookie = `${nome}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
+    }
+
+    // Função para gerar hash SHA-256
     async function hashPassword(password) {
       const msgBuffer = new TextEncoder().encode(password);
       const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -98,11 +106,12 @@
       return hashHex;
     }
 
+    // Verifica autenticação
     async function checkPassword() {
       const password = document.getElementById('password').value;
       const inputHash = await hashPassword(password);
       if (inputHash === correctPasswordHash) {
-        setCookie('auth_ok', 'sim', 7);
+        setCookie('auth_ok', 'sim', 7); // Cookie válido por 7 dias
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('main-content').style.display = 'block';
         carregarDados();
@@ -111,6 +120,7 @@
       }
     }
 
+    // Verifica cookie ao carregar a página
     window.addEventListener('DOMContentLoaded', () => {
       if (getCookie('auth_ok') === 'sim') {
         document.getElementById('login-container').style.display = 'none';
@@ -119,6 +129,23 @@
       }
     });
 
+    // Botão de logout
+    document.getElementById('logout').onclick = () => {
+      deleteCookie('auth_ok');
+      document.getElementById('main-content').style.display = 'none';
+      document.getElementById('login-container').style.display = 'block';
+      document.getElementById('password').value = '';
+      document.getElementById('error').style.display = 'none';
+    };
+
+    // Permite login com Enter
+    document.getElementById('password').addEventListener('keypress', async function(e) {
+      if (e.key === 'Enter') {
+        await checkPassword();
+      }
+    });
+
+    // Dados da API
     const channelID = '2992975';
     const readAPIKey = '54I7YWRQZ7EKSZKH';
     let dadosFeed = [];
@@ -128,9 +155,19 @@
       const url = `https://api.thingspeak.com/channels/${channelID}/feeds.json?results=20&api_key=${readAPIKey}`;
       try {
         const resp = await fetch(url);
+        if (!resp.ok) {
+          throw new Error(`Erro na requisição: ${resp.status}`);
+        }
         const json = await resp.json();
+
+        if (!json.feeds || !Array.isArray(json.feeds)) {
+          console.error('Erro: json.feeds é inválido', json);
+          document.getElementById('api-error').style.display = 'block';
+          return;
+        }
+
         const feeds = json.feeds.map(f => ({
-          time: f.field3 || f.created_at.substr(11,8),
+          time: f.field3 || (f.created_at ? f.created_at.substr(11, 8) : 'N/A'),
           nivel: parseFloat(f.field1) || 0,
           dist: parseFloat(f.field2) || 0,
           ip: f.field4 || 'N/A'
@@ -138,10 +175,12 @@
         dadosFeed = feeds;
 
         const ultimo = feeds.at(-1);
-        document.getElementById('nivel').innerText = ultimo.nivel;
-        document.getElementById('distancia').innerText = ultimo.dist;
-        document.getElementById('hora').innerText = ultimo.time;
-        document.getElementById('esp-ip').innerText = ultimo.ip;
+        if (ultimo) {
+          document.getElementById('nivel').innerText = ultimo.nivel;
+          document.getElementById('distancia').innerText = ultimo.dist;
+          document.getElementById('hora').innerText = ultimo.time;
+          document.getElementById('esp-ip').innerText = ultimo.ip;
+        }
 
         const labels = feeds.map(f => f.time);
         const dataNivel = feeds.map(f => f.nivel);
@@ -149,7 +188,7 @@
         const dataMedia = feeds.map((_, i, arr) => {
           if (i < 4) return null;
           const slice = arr.slice(i-4, i+1).map(f => f.nivel);
-          return (slice.reduce((a,b) => a+b, 0) / 5).toFixed(1);
+          return (slice.reduce((a, b) => a + b, 0) / 5).toFixed(1);
         });
 
         if (!chartNivel) {
@@ -181,21 +220,30 @@
           chartMedia.data.datasets[0].data = dataMedia;
           chartMedia.update();
         }
+
+        document.getElementById('api-error').style.display = 'none';
       } catch (err) {
+        console.error('Erro ao carregar dados:', err);
         document.getElementById('api-error').style.display = 'block';
       }
     }
 
+    // Exportar CSV
     document.getElementById('baixarCsv').onclick = () => {
+      if (dadosFeed.length === 0) {
+        alert('Nenhum dado disponível para exportar.');
+        return;
+      }
       let csv = "hora,nivel,distancia,ip\n";
       dadosFeed.forEach(f => csv += `${f.time},${f.nivel},${f.dist},${f.ip}\n`);
-      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `nivel_agua_${Date.now()}.csv`;
       a.click();
     };
 
+    // Atualiza dados a cada 15 segundos
     setInterval(carregarDados, 15000);
   </script>
 </body>
