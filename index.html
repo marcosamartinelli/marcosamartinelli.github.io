@@ -5,36 +5,25 @@
   <title>Painel do Reservatório</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <script>
+  <script>
     const senhaCorreta = "montecristo";
     const chaveSenha = "senha_ok";
 
+    // Bloqueia imediatamente o carregamento da página se a senha ainda não foi validada
     if (localStorage.getItem(chaveSenha) !== "sim") {
       const entrada = prompt("Digite a senha para acesso:");
       if (entrada !== senhaCorreta) {
-        // Impede qualquer renderização e bloqueia completamente
-        document.write(`
-          <!DOCTYPE html>
-          <html><head><meta charset="UTF-8"><title>Acesso Negado</title>
-          <style>
-            body { background:#fff; text-align:center; padding-top:20vh; font-family:sans-serif; }
-            h1 { color:red; font-size:2em; }
-          </style>
-          </head>
-          <body><h1>🔒 Acesso negado</h1></body></html>
-        `);
-        document.close();
+        window.stop(); // Interrompe o carregamento de tudo
+        document.body.innerHTML = "<h1 style='color:red; text-align:center; margin-top: 20vh;'>🔒 Acesso negado</h1>";
         throw new Error("Senha incorreta");
       } else {
         localStorage.setItem(chaveSenha, "sim");
       }
     }
   </script>
-  
+
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  
- 
 </head>
 
 
