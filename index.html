@@ -60,7 +60,7 @@
 
     <div class="card mb-3">
       <div class="card-body">
-        <h5>Média Móvel do Nível da Água (últimos 5)</h5>
+        <h5>Média Móvel do Nível da Água (ultimos 5)</h5>
         <canvas id="graficoMedia"></canvas>
       </div>
     </div>
@@ -72,10 +72,24 @@
   </div>
 
   <script>
-    // Hash SHA-256 predefinido da senha (gere o hash da sua senha desejada)
-    const correctPasswordHash = "8ac558607b5aca14188fc9c4a75b177dcb02ff8cda2e3adcd98b603ec0c6a8f7"; // Exemplo: hash de "minha_senha"
+    const correctPasswordHash = "8ac558607b5aca14188fc9c4a75b177dcb02ff8cda2e3adcd98b603ec0c6a8f7"; // "montecristo"
 
-    // Função para gerar hash SHA-256 da senha digitada
+    function setCookie(nome, valor, dias) {
+      const d = new Date();
+      d.setTime(d.getTime() + (dias * 24 * 60 * 60 * 1000));
+      document.cookie = `${nome}=${valor};expires=${d.toUTCString()};path=/`;
+    }
+
+    function getCookie(nome) {
+      const nameEQ = nome + "=";
+      const ca = document.cookie.split(';');
+      for (let c of ca) {
+        while (c.charAt(0) == ' ') c = c.substring(1);
+        if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length);
+      }
+      return null;
+    }
+
     async function hashPassword(password) {
       const msgBuffer = new TextEncoder().encode(password);
       const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -88,22 +102,23 @@
       const password = document.getElementById('password').value;
       const inputHash = await hashPassword(password);
       if (inputHash === correctPasswordHash) {
+        setCookie('auth_ok', 'sim', 7);
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('main-content').style.display = 'block';
-        carregarDados(); // Carrega dados após login
+        carregarDados();
       } else {
         document.getElementById('error').style.display = 'block';
       }
     }
 
-    // Permite login com Enter
-    document.getElementById('password').addEventListener('keypress', async function(e) {
-      if (e.key === 'Enter') {
-        await checkPassword();
+    window.addEventListener('DOMContentLoaded', () => {
+      if (getCookie('auth_ok') === 'sim') {
+        document.getElementById('login-container').style.display = 'none';
+        document.getElementById('main-content').style.display = 'block';
+        carregarDados();
       }
     });
 
-    // Código para carregar dados
     const channelID = '2992975';
     const readAPIKey = '54I7YWRQZ7EKSZKH';
     let dadosFeed = [];
@@ -113,34 +128,20 @@
       const url = `https://api.thingspeak.com/channels/${channelID}/feeds.json?results=20&api_key=${readAPIKey}`;
       try {
         const resp = await fetch(url);
-        if (!resp.ok) {
-          throw new Error(`Erro na requisição: ${resp.status}`);
-        }
         const json = await resp.json();
-
-        // Verifica se json.feeds existe e é um array
-        if (!json.feeds || !Array.isArray(json.feeds)) {
-          console.error('Erro: json.feeds é indefinido ou não é um array', json);
-          document.getElementById('api-error').style.display = 'block';
-          return;
-        }
-
         const feeds = json.feeds.map(f => ({
-          time: f.field3 || (f.created_at ? f.created_at.substr(11, 8) : 'N/A'),
+          time: f.field3 || f.created_at.substr(11,8),
           nivel: parseFloat(f.field1) || 0,
           dist: parseFloat(f.field2) || 0,
           ip: f.field4 || 'N/A'
         }));
         dadosFeed = feeds;
 
-        // Exibe o último dado
         const ultimo = feeds.at(-1);
-        if (ultimo) {
-          document.getElementById('nivel').innerText = ultimo.nivel;
-          document.getElementById('distancia').innerText = ultimo.dist;
-          document.getElementById('hora').innerText = ultimo.time;
-          document.getElementById('esp-ip').innerText = ultimo.ip;
-        }
+        document.getElementById('nivel').innerText = ultimo.nivel;
+        document.getElementById('distancia').innerText = ultimo.dist;
+        document.getElementById('hora').innerText = ultimo.time;
+        document.getElementById('esp-ip').innerText = ultimo.ip;
 
         const labels = feeds.map(f => f.time);
         const dataNivel = feeds.map(f => f.nivel);
@@ -154,26 +155,17 @@
         if (!chartNivel) {
           chartNivel = new Chart(document.getElementById('graficoNivel'), {
             type: 'line',
-            data: {
-              labels: labels,
-              datasets: [{ label: 'Nível (%)', data: dataNivel, borderColor: 'blue', tension: 0.1 }]
-            },
+            data: { labels, datasets: [{ label: 'Nível (%)', data: dataNivel, borderColor: 'blue', tension: 0.1 }] },
             options: { responsive: true, scales: { y: { min: 0, max: 100 } } }
           });
           chartDist = new Chart(document.getElementById('graficoDist'), {
             type: 'line',
-            data: {
-              labels: labels,
-              datasets: [{ label: 'Distância (cm)', data: dataDist, borderColor: 'green', tension: 0.1 }]
-            },
+            data: { labels, datasets: [{ label: 'Distância (cm)', data: dataDist, borderColor: 'green', tension: 0.1 }] },
             options: { responsive: true, scales: { y: { min: 0, max: 260 } } }
           });
           chartMedia = new Chart(document.getElementById('graficoMedia'), {
             type: 'line',
-            data: {
-              labels: labels,
-              datasets: [{ label: 'Média Móvel (%)', data: dataMedia, borderColor: 'orange', tension: 0.3 }]
-            },
+            data: { labels, datasets: [{ label: 'Média Móvel (%)', data: dataMedia, borderColor: 'orange', tension: 0.3 }] },
             options: { responsive: true, scales: { y: { min: 0, max: 100 } } }
           });
         } else {
@@ -189,21 +181,12 @@
           chartMedia.data.datasets[0].data = dataMedia;
           chartMedia.update();
         }
-
-        // Esconde mensagem de erro se os dados foram carregados com sucesso
-        document.getElementById('api-error').style.display = 'none';
-      } catch (error) {
-        console.error('Erro ao carregar dados:', error);
+      } catch (err) {
         document.getElementById('api-error').style.display = 'block';
       }
     }
 
-    // Exportar CSV
     document.getElementById('baixarCsv').onclick = () => {
-      if (dadosFeed.length === 0) {
-        alert('Nenhum dado disponível para exportar.');
-        return;
-      }
       let csv = "hora,nivel,distancia,ip\n";
       dadosFeed.forEach(f => csv += `${f.time},${f.nivel},${f.dist},${f.ip}\n`);
       const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
@@ -213,7 +196,6 @@
       a.click();
     };
 
-    // Atualiza dados a cada 15 segundos após login
     setInterval(carregarDados, 15000);
   </script>
 </body>
