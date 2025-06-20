@@ -8,23 +8,26 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <script>
-  (function () {
-    const senhaCorreta = "montecristo";
-    const chaveSenha = "senha_ok";
+(function () {
+  const senhaCorreta = "montecristo";
+  const chaveSenha = "senha_ok";
 
-    if (localStorage.getItem(chaveSenha) !== "sim") {
-      const entrada = prompt("Digite a senha para acesso:");
-      if (entrada !== senhaCorreta) {
-        document.open();
-        document.write("<h1 style='color:red;'>🔒 Acesso negado</h1>");
-        document.close();
-        throw new Error("Senha incorreta");
-      } else {
-        localStorage.setItem(chaveSenha, "sim");
-      }
+  // Se ainda não tem a autorização salva
+  if (localStorage.getItem(chaveSenha) !== "sim") {
+    const senha = prompt("Digite a senha para acesso:");
+
+    if (senha !== senhaCorreta) {
+      // Limpa a tela antes de bloquear
+      document.documentElement.innerHTML = "<body style='background:#fff;'><h1 style='color:red; text-align:center; margin-top:20vh;'>🔒 Acesso negado</h1></body>";
+      throw new Error("Senha incorreta");
     }
-  })();
+
+    // Armazena a confirmação para evitar novo prompt
+    localStorage.setItem(chaveSenha, "sim");
+  }
+})();
 </script>
+
 <body class="bg-light">
 <div class="container py-4">
   <div class="text-center mb-4">
