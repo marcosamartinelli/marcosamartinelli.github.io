@@ -9,6 +9,7 @@
   <style>
     #login-container { display: block; text-align: center; margin-top: 50px; }
     #main-content { display: none; }
+    #api-error { display: none; color: red; text-align: center; }
   </style>
 </head>
 <body class="bg-light">
@@ -32,6 +33,7 @@
     <div class="text-center mb-4">
       <h2 class="text-primary">Painel Remoto do Reservatório</h2>
     </div>
+    <p id="api-error">Erro ao carregar dados da API. Verifique a conexão ou a configuração.</p>
 
     <div class="card mb-3">
       <div class="card-body">
@@ -70,26 +72,38 @@
   </div>
 
   <script>
-    // Senha fixa (altere para a senha desejada)
-    const correctPassword = "sua_senha_aqui";
+    // Hash SHA-256 predefinido da senha (gere o hash da sua senha desejada)
+    const correctPasswordHash = "f7c3bc1d808e04732adf679965ccc34ca7ae3441"; // Exemplo: hash de "minha_senha"
 
-    function checkPassword() {
+    // Função para gerar hash SHA-256 da senha digitada
+    async function hashPassword(password) {
+      const msgBuffer = new TextEncoder().encode(password);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      return hashHex;
+    }
+
+    async function checkPassword() {
       const password = document.getElementById('password').value;
-      if (password === correctPassword) {
+      const inputHash = await hashPassword(password);
+      if (inputHash === correctPasswordHash) {
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('main-content').style.display = 'block';
-        carregarDados(); // Carrega os dados após login
+        carregarDados(); // Carrega dados após login
       } else {
         document.getElementById('error').style.display = 'block';
       }
     }
 
     // Permite login com Enter
-    document.getElementById('password').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') checkPassword();
+    document.getElementById('password').addEventListener('keypress', async function(e) {
+      if (e.key === 'Enter') {
+        await checkPassword();
+      }
     });
 
-    // Código original para carregar dados
+    // Código para carregar dados
     const channelID = '2992975';
     const readAPIKey = '54I7YWRQZ7EKSZKH';
     let dadosFeed = [];
@@ -97,73 +111,99 @@
 
     async function carregarDados() {
       const url = `https://api.thingspeak.com/channels/${channelID}/feeds.json?results=20&api_key=${readAPIKey}`;
-      const resp = await fetch(url);
-      const json = await resp.json();
-      const feeds = json.feeds.map(f => ({
-        time: f.field3 || f.created_at.substr(11,8),
-        nivel: parseFloat(f.field1),
-        dist: parseFloat(f.field2),
-        ip: f.field4
-      }));
-      dadosFeed = feeds;
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          throw new Error(`Erro na requisição: ${resp.status}`);
+        }
+        const json = await resp.json();
 
-      const ultimo = feeds.at(-1);
-      document.getElementById('nivel').innerText = ultimo.nivel;
-      document.getElementById('distancia').innerText = ultimo.dist;
-      document.getElementById('hora').innerText = ultimo.time;
-      document.getElementById('esp-ip').innerText = ultimo.ip || 'N/A';
+        // Verifica se json.feeds existe e é um array
+        if (!json.feeds || !Array.isArray(json.feeds)) {
+          console.error('Erro: json.feeds é indefinido ou não é um array', json);
+          document.getElementById('api-error').style.display = 'block';
+          return;
+        }
 
-      const labels = feeds.map(f => f.time);
-      const dataNivel = feeds.map(f => f.nivel);
-      const dataDist = feeds.map(f => f.dist);
-      const dataMedia = feeds.map((_, i, arr) => {
-        if (i < 4) return null;
-        const slice = arr.slice(i-4, i+1).map(f => f.nivel);
-        return (slice.reduce((a,b) => a+b, 0) / 5).toFixed(1);
-      });
+        const feeds = json.feeds.map(f => ({
+          time: f.field3 || (f.created_at ? f.created_at.substr(11, 8) : 'N/A'),
+          nivel: parseFloat(f.field1) || 0,
+          dist: parseFloat(f.field2) || 0,
+          ip: f.field4 || 'N/A'
+        }));
+        dadosFeed = feeds;
 
-      if (!chartNivel) {
-        chartNivel = new Chart(document.getElementById('graficoNivel'), {
-          type: 'line',
-          data: {
-            labels: labels,
-            datasets: [{ label: 'Nível (%)', data: dataNivel, borderColor: 'blue', tension: 0.1 }]
-          },
-          options: { responsive: true, scales: { y: { min: 0, max: 100 } } }
+        // Exibe o último dado
+        const ultimo = feeds.at(-1);
+        if (ultimo) {
+          document.getElementById('nivel').innerText = ultimo.nivel;
+          document.getElementById('distancia').innerText = ultimo.dist;
+          document.getElementById('hora').innerText = ultimo.time;
+          document.getElementById('esp-ip').innerText = ultimo.ip;
+        }
+
+        const labels = feeds.map(f => f.time);
+        const dataNivel = feeds.map(f => f.nivel);
+        const dataDist = feeds.map(f => f.dist);
+        const dataMedia = feeds.map((_, i, arr) => {
+          if (i < 4) return null;
+          const slice = arr.slice(i-4, i+1).map(f => f.nivel);
+          return (slice.reduce((a,b) => a+b, 0) / 5).toFixed(1);
         });
-        chartDist = new Chart(document.getElementById('graficoDist'), {
-          type: 'line',
-          data: {
-            labels: labels,
-            datasets: [{ label: 'Distância (cm)', data: dataDist, borderColor: 'green', tension: 0.1 }]
-          },
-          options: { responsive: true, scales: { y: { min: 0, max: 260 } } }
-        });
-        chartMedia = new Chart(document.getElementById('graficoMedia'), {
-          type: 'line',
-          data: {
-            labels: labels,
-            datasets: [{ label: 'Média Móvel (%)', data: dataMedia, borderColor: 'orange', tension: 0.3 }]
-          },
-          options: { responsive: true, scales: { y: { min: 0, max: 100 } } }
-        });
-      } else {
-        chartNivel.data.labels = labels;
-        chartNivel.data.datasets[0].data = dataNivel;
-        chartNivel.update();
 
-        chartDist.data.labels = labels;
-        chartDist.data.datasets[0].data = dataDist;
-        chartDist.update();
+        if (!chartNivel) {
+          chartNivel = new Chart(document.getElementById('graficoNivel'), {
+            type: 'line',
+            data: {
+              labels: labels,
+              datasets: [{ label: 'Nível (%)', data: dataNivel, borderColor: 'blue', tension: 0.1 }]
+            },
+            options: { responsive: true, scales: { y: { min: 0, max: 100 } } }
+          });
+          chartDist = new Chart(document.getElementById('graficoDist'), {
+            type: 'line',
+            data: {
+              labels: labels,
+              datasets: [{ label: 'Distância (cm)', data: dataDist, borderColor: 'green', tension: 0.1 }]
+            },
+            options: { responsive: true, scales: { y: { min: 0, max: 260 } } }
+          });
+          chartMedia = new Chart(document.getElementById('graficoMedia'), {
+            type: 'line',
+            data: {
+              labels: labels,
+              datasets: [{ label: 'Média Móvel (%)', data: dataMedia, borderColor: 'orange', tension: 0.3 }]
+            },
+            options: { responsive: true, scales: { y: { min: 0, max: 100 } } }
+          });
+        } else {
+          chartNivel.data.labels = labels;
+          chartNivel.data.datasets[0].data = dataNivel;
+          chartNivel.update();
 
-        chartMedia.data.labels = labels;
-        chartMedia.data.datasets[0].data = dataMedia;
-        chartMedia.update();
+          chartDist.data.labels = labels;
+          chartDist.data.datasets[0].data = dataDist;
+          chartDist.update();
+
+          chartMedia.data.labels = labels;
+          chartMedia.data.datasets[0].data = dataMedia;
+          chartMedia.update();
+        }
+
+        // Esconde mensagem de erro se os dados foram carregados com sucesso
+        document.getElementById('api-error').style.display = 'none';
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error);
+        document.getElementById('api-error').style.display = 'block';
       }
     }
 
     // Exportar CSV
     document.getElementById('baixarCsv').onclick = () => {
+      if (dadosFeed.length === 0) {
+        alert('Nenhum dado disponível para exportar.');
+        return;
+      }
       let csv = "hora,nivel,distancia,ip\n";
       dadosFeed.forEach(f => csv += `${f.time},${f.nivel},${f.dist},${f.ip}\n`);
       const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
